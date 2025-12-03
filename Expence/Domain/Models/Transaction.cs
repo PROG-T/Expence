@@ -1,4 +1,5 @@
-﻿using Expence.Domain.Enum;
+﻿using Expence.Domain.Constants;
+using Expence.Domain.Enum;
 
 namespace Expence.Domain.Models
 {
@@ -10,8 +11,9 @@ namespace Expence.Domain.Models
         public TransactionType Type { get; set; } // "income/credit" or "expense/debit"
         public decimal Amount { get; set; }
         public string Category { get; set; }
+        public string TransactionReference { get; set; }
         public string Description { get; set; }
-        public DateTime CreatedAt { get; set; }
+        public DateTime CreatedAt { get; set; } = DateTimeConstants.CurrentWestAfricanTime;
     }
 
 

@@ -11,24 +11,40 @@ namespace Expence.Infrastructure.Repositories
         {
             _context = context;
         }
-        public async Task AddAsync(Transaction transaction)
+        public async Task AddTransactionAsync(Transaction transaction)
         {
             await _context.Transactions.AddAsync(transaction);
             await  _context.SaveChangesAsync();
         }
 
-        public Task DeleteAsync(Transaction transaction)
+        public async Task DeleteTransactionAsync(Transaction transaction)
         {
-            throw new NotImplementedException();
+            _context.Transactions.Remove(transaction);
+            await _context.SaveChangesAsync();
         }
 
-        public async Task<IList<Transaction>> GetAllTransactionForUserByUserIdAsync(long userId)
+        public async Task<List<Transaction>> GetAllTransactionForUserByUserIdAsync(long userId)
         {
-             return await _context.Transactions.Where(t => t.UserId == userId).ToListAsync()       }
+            // add pagination
+            //filter by category, type, date
+            return await _context.Transactions.AsNoTracking().Where(t => t.UserId == userId).ToListAsync();
+        }
 
         public async Task<Transaction> GetByTransactionIdAsync(long id)
         {
             return await _context.Transactions.FirstOrDefaultAsync(t => t.Id == id);
+        }
+
+        public async Task<Transaction> GetByTransactionReferenceAsync(string transactionReference)
+        {
+            return await _context.Transactions.FirstOrDefaultAsync(t => t.TransactionReference == transactionReference);
+        }
+
+        public async Task UpdateTransactionAsync(Transaction transaction)
+        {
+            _context.Transactions.Update(transaction);
+            await _context.SaveChangesAsync();
+
         }
     }
 }

@@ -22,16 +22,13 @@ namespace Expence.Infrastructure.Repositories
             };
         }
 
-        public async Task<UserDto> GetUserByEmailAsync(string email)
+        public async Task<User> GetUserByEmailAsync(string email)
         {
            var response = await _context.Users
                 .Where(u => u.Email == email)
-                .Select(u => new UserDto
-                {
-                    Email = u.Email
-                })
+               
                 .FirstOrDefaultAsync();
-            return response?? new UserDto { };
+            return response?? new User { };
         }
 
     }
