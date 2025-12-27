@@ -8,10 +8,10 @@ namespace Expence.Application.Services
 {
     public class EmailService
     {
-        private readonly IEmailDomainInfoRepository _emailDomainInfoRepository;
-        public EmailService(IEmailDomainInfoRepository emailDomainInfoRepository)
+        private readonly IUnitOfWork _unitOfWork;
+        public EmailService(IUnitOfWork unitOfWork)
         {
-            _emailDomainInfoRepository = emailDomainInfoRepository;
+            _unitOfWork = unitOfWork;
         }
         public async Task<BaseResponse<bool>> CheckDomainWithExternalApi(string email) 
         {
@@ -23,7 +23,7 @@ namespace Expence.Application.Services
         public async Task<BaseResponse<bool>> IsDisposableEmailAsync(string email)
         {
             var domain = GetDomainFromEmail(email);
-            var existing = await _emailDomainInfoRepository.GetDomainNameAsync(domain);
+            var existing = await _unitOfWork.EmailDomainInfo.GetDomainNameAsync(domain);
             if (existing != null)
                 return new BaseResponse<bool>(existing.IsDisposable,"");
 
@@ -36,7 +36,8 @@ namespace Expence.Application.Services
                 IsDisposable = isDisposable.Status
             };
 
-            await _emailDomainInfoRepository.AddDomainNameAsync(domainInfo);
+            await _unitOfWork.EmailDomainInfo.AddDomainNameAsync(domainInfo);
+            await _unitOfWork.SaveAsync();
             return new BaseResponse<bool>(isDisposable.Status, "");
 
         }

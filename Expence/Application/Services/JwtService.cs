@@ -34,7 +34,7 @@ namespace Expence.Application.Services
             };
 
             var token = new JwtSecurityToken(
-                issuer:_configuration["Jwt;Issuer"],
+                issuer:_configuration["Jwt:Issuer"],
                 audience:_configuration["Jwt:Audience"],
                 claims,
                 expires: DateTime.Now.AddMinutes(30),

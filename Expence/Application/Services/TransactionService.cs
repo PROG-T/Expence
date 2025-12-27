@@ -3,26 +3,25 @@ using Expence.Domain.Constants;
 using Expence.Domain.DTOs;
 using Expence.Domain.Models;
 using Expence.Infrastructure.Interface;
+using Microsoft.EntityFrameworkCore;
 using System.Security.Cryptography;
 
 namespace Expence.Application.Services
 {
     public class TransactionService : ITransactionService
     {
-        private readonly ITransactionRepository _transactionRepository;
-        private readonly IUserRepository _userRepository;
+        private readonly IUnitOfWork _unitOfWork;
         private readonly IUserContextService _userContext;
 
-        public TransactionService(ITransactionRepository transactionRepository, IUserRepository userRepository, IUserContextService userContext)
+        public TransactionService(IUnitOfWork unitOfWork, IUserContextService userContext)
         {
 
-            _transactionRepository = transactionRepository;
-            _userRepository = userRepository;
-            _userContext = userContext;
+          _unitOfWork = unitOfWork;
+          _userContext = userContext;
         }
         public async Task<BaseResponse<Transaction>> CreateTransactionAsync(CreateTransactionRequest request)
         {
-            var user = await _userRepository.GetUserByEmailAsync(_userContext.GetUserEmailAsync());
+            var user = await _unitOfWork.Users.GetUserByEmailAsync(_userContext.GetUserEmail());
             if (user == null) return new BaseResponse<Transaction>(false, "User not found");
 
             var transaction = new Transaction
@@ -32,40 +31,45 @@ namespace Expence.Application.Services
                 Category = request.Category,
                 CreatedAt = DateTimeConstants.CurrentWestAfricanTime,
                 Type = request.Type,
-                UserId =  Convert.ToInt64(_userContext.GetUserIdAsync()),
+                UserId =  Convert.ToInt64(_userContext.GetUserId()),
                 TransactionReference = $"TRX-{DateTime.UtcNow:yyyyMMddHHmmss}-{RandomNumberGenerator.GetInt32(100000, 999999)}"
             
             };
 
-            await _transactionRepository.AddTransactionAsync(transaction);
+            await _unitOfWork.Transactions.AddTransactionAsync(transaction);
+            await _unitOfWork.SaveAsync();
+
             return new BaseResponse<Transaction>(true, "transaction successfully recorded");
         }
 
-        public async Task<BaseResponse<Transaction>> DeleteTransactionAsync(string transactionReference)
+        public async Task<BaseResponse<Transaction>> DeleteTransactionAsync(string transactionReference, long userId)
         {
-            var savedTransaction = await _transactionRepository.GetByTransactionReferenceAsync(transactionReference);
-            if (savedTransaction == null) new BaseResponse<Transaction>(false, "transaction not found");
+            var savedTransaction = await _unitOfWork.Transactions.GetByTransactionReferenceAsync(transactionReference);
+            if (savedTransaction == null || savedTransaction.UserId != userId) 
+                return new BaseResponse<Transaction>(false, "transaction not found");
 
-            await _transactionRepository.DeleteTransactionAsync(savedTransaction);
+             _unitOfWork.Transactions.DeleteTransactionAsync(savedTransaction);
+            await _unitOfWork.SaveAsync();
+
             return new BaseResponse<Transaction>(true, "transaction successfully deleted");
 
         }
 
         public async Task<BaseResponse<Transaction>> GetTransactionByIdAsync(long id)
         {
-            var transaction = await _transactionRepository.GetByTransactionIdAsync(id);
+            var transaction = await _unitOfWork.Transactions.GetByTransactionIdAsync(id);
             return new BaseResponse<Transaction>(true, "", transaction);
         }
 
-        public async Task<BaseResponse<List<Transaction>>> GetAllTransactionByUserIdAsync(long userId)
+        public async Task<BaseResponse<List<Transaction>>> GetAllTransactionByUserIdAsync(TransactionQueryRequest request)
         {
-            var transactions = await _transactionRepository.GetAllTransactionForUserByUserIdAsync(userId);
+            var transactions = await _unitOfWork.Transactions.GetAllTransactionForUserByUserIdAsync(request);
             return new BaseResponse<List<Transaction>>(true, "", transactions);
         }
 
         public async Task<BaseResponse<Transaction>> UpdateTransaction(UpdateTransactionRequest transactionRequest)
         {
-            var foundTransaction = await _transactionRepository.GetByTransactionReferenceAsync(transactionRequest.transactionReference);
+            var foundTransaction = await _unitOfWork.Transactions.GetByTransactionReferenceAsync(transactionRequest.transactionReference);
             if (foundTransaction == null) return new BaseResponse<Transaction>(false,"No transaction found");
 
             foundTransaction.Amount = transactionRequest.Amount;
@@ -73,7 +77,9 @@ namespace Expence.Application.Services
             foundTransaction.Description = transactionRequest.Description;
             foundTransaction.Type = transactionRequest.Type;
 
-            await _transactionRepository.UpdateTransactionAsync(foundTransaction);
+            await _unitOfWork.Transactions.UpdateTransactionAsync(foundTransaction);
+            await _unitOfWork.SaveAsync();
+
             return new BaseResponse<Transaction>(true, " transaction updated");
         }
     }

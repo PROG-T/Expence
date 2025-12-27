@@ -1,4 +1,5 @@
-﻿using Expence.Domain.Models;
+﻿using Expence.Domain.DTOs;
+using Expence.Domain.Models;
 
 namespace Expence.Infrastructure.Interface
 {
@@ -6,9 +7,10 @@ namespace Expence.Infrastructure.Interface
     {
         Task<Transaction> GetByTransactionIdAsync(long id);
         Task<Transaction> GetByTransactionReferenceAsync(string transactionReference);
-        Task<List<Transaction>> GetAllTransactionForUserByUserIdAsync(long userid);
+        Task<List<Transaction>> GetAllTransactionForUserByUserIdAsync(TransactionQueryRequest request);
+        Task<List<Transaction>> GetAllMonthlyTransactionByUserIdAsync(long userId);
         Task AddTransactionAsync(Transaction transaction);
-        Task DeleteTransactionAsync(Transaction transaction);
+        void DeleteTransactionAsync(Transaction transaction);
         Task UpdateTransactionAsync(Transaction transaction);
     }
 }

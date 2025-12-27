@@ -2,7 +2,7 @@
 using Expence.Domain.DTOs;
 using Microsoft.AspNetCore.Mvc;
 
-namespace Expence.Controllers
+namespace Expence.API.Controllers
 {
     [ApiController]
     [Route("api/[Controller]")]
@@ -17,8 +17,6 @@ namespace Expence.Controllers
         [HttpPost("register")]
         public async Task<IActionResult> Register([FromBody] RegisterDTo request) 
         { 
-            if(!ModelState.IsValid) return BadRequest(ModelState);
-
             var response = await _authService.Register(request);
             if (response.Status == false) return BadRequest(response);
             return Ok(response);
@@ -27,8 +25,6 @@ namespace Expence.Controllers
         [HttpPost("login")]
         public async Task<IActionResult> Login([FromBody] LoginDTO request)
         {
-            if (!ModelState.IsValid) return BadRequest(ModelState);
-
             var response = await _authService.Login(request);
             if (response.Status == false) return BadRequest(response);
             return Ok(response);

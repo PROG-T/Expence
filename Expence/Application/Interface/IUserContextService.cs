@@ -2,7 +2,7 @@
 {
     public interface IUserContextService
     {
-        string GetUserIdAsync();
-        string GetUserEmailAsync();
+        string GetUserId();
+        string GetUserEmail();
     }
 }

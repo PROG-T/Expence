@@ -6,19 +6,19 @@ namespace Expence.Application.Services
 {
     public class UserContextService : IUserContextService
     {
-        private readonly HttpContextAccessor _contextAccessor;
-        public UserContextService(HttpContextAccessor contextAccessor)
+        private readonly IHttpContextAccessor _contextAccessor;
+        public UserContextService(IHttpContextAccessor contextAccessor)
         {
             _contextAccessor = contextAccessor;
         }
-        public string GetUserEmailAsync()
-        {
-            return _contextAccessor.HttpContext?.User?.FindFirstValue(JwtRegisteredClaimNames.Sub);
-        }
-
-        public string GetUserIdAsync()
+        public string GetUserEmail()
         {
             return _contextAccessor.HttpContext?.User?.FindFirstValue(JwtRegisteredClaimNames.Email);
+        }
+
+        public string GetUserId()
+        {
+            return _contextAccessor.HttpContext?.User?.FindFirstValue(JwtRegisteredClaimNames.Sub);
         }
     }
 }

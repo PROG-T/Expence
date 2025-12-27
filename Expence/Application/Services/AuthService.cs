@@ -2,6 +2,7 @@
 using Expence.Domain.DTOs;
 using Expence.Domain.Models;
 using Expence.Infrastructure.Interface;
+using Microsoft.EntityFrameworkCore;
 using System.Security.Claims;
 using System.Text.RegularExpressions;
 
@@ -10,17 +11,18 @@ namespace Expence.Application.Services
     public class AuthService : IAuthService
     {
         private readonly IJwtService _jwtService;
-        private readonly IUserRepository _userRepository;
         private readonly EmailService _emailService;
-        public AuthService(IJwtService jwtService, IUserRepository userRepository, EmailService emailService)
+        private readonly IUnitOfWork _uow;
+
+        public AuthService(IJwtService jwtService, IUnitOfWork uow, EmailService emailService)
         {
             _jwtService = jwtService;
-            _userRepository = userRepository;
+            _uow = uow;
             _emailService = emailService;
         }
         public async Task<BaseResponse<AuthResponseDto>> Login(LoginDTO loginDto)
         {
-            var user = await _userRepository.GetUserByEmailAsync(loginDto.Email);
+            var user = await _uow.Users.GetUserByEmailAsync(loginDto.Email);
             if (user == null)
             {
                 return new BaseResponse<AuthResponseDto>(false, "User does not exist, pls register");
@@ -41,7 +43,7 @@ namespace Expence.Application.Services
             var principal = _jwtService.GetClaimsPrincipalFromExpiredToken(token);
             var email = principal.FindFirstValue(ClaimTypes.Email);
 
-            var user = await _userRepository.GetUserByEmailAsync(email);
+            var user = await _uow.Users.GetUserByEmailAsync(email);
             if (user == null) { return new BaseResponse<AuthResponseDto>(false, "user not found"); }
 
             var newJwt = _jwtService.GenerateToken(user);
@@ -65,7 +67,7 @@ namespace Expence.Application.Services
                 return new BaseResponse<AuthResponseDto>(false, "Disposable email addresses are not allowed.");
             }
 
-            var existing = await _userRepository.GetUserByEmailAsync(registerDto.Email);
+            var existing = await _uow.Users.GetUserByEmailAsync(registerDto.Email);
             if (existing != null)
             {
                 return new BaseResponse<AuthResponseDto>(false, "user already exists");
@@ -85,7 +87,9 @@ namespace Expence.Application.Services
                 PasswordHash = hashedPassword
             };
 
-            var addedUser = await _userRepository.AddUserAsync(user);
+            var addedUser = await _uow.Users.AddUserAsync(user);
+            await _uow.SaveAsync();
+
 
             var token = _jwtService.GenerateToken(user);
 

@@ -14,7 +14,6 @@ namespace Expence.Infrastructure.Repositories
         public async Task<EmailDomainInfo> AddDomainNameAsync(EmailDomainInfo emailDomainInfo)
         {
             await _context.EmailDomainInfo.AddAsync(emailDomainInfo);
-            await _context.SaveChangesAsync();
             return emailDomainInfo;
         }
 

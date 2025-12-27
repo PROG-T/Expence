@@ -1,9 +1,11 @@
-﻿using Expence.Application.Interface;
+﻿using Expence.Application.Attributes;
+using Expence.Application.Interface;
 using Expence.Domain.DTOs;
+using Expence.Domain.Models;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
-namespace Expence.Controllers
+namespace Expence.API.Controllers
 {
     [ApiController]
     [Route("api/[Controller]")]
@@ -22,8 +24,6 @@ namespace Expence.Controllers
         [HttpPost]
         public async Task<IActionResult> CreateTransaction([FromBody] CreateTransactionRequest request)
         {
-            if (!ModelState.IsValid)
-                return BadRequest(ModelState);
 
             var response = await _transactionService.CreateTransactionAsync( request);
 
@@ -34,16 +34,27 @@ namespace Expence.Controllers
         }
 
         [HttpGet]
-        public async Task<IActionResult> GetAllUserTransactions()
+        public async Task<IActionResult> GetAllUserTransactions([FromQuery] TransactionQueryParameters request)
         {
-            var response = await _transactionService.GetAllTransactionByUserIdAsync(Convert.ToInt64(_userContext.GetUserIdAsync()));
+            var queryRequest = new TransactionQueryRequest
+            {
+                UserId = Convert.ToInt64(_userContext.GetUserId()),
+                Category = request.Category,
+                Type = request.Type,
+                FromDate = request.FromDate,
+                ToDate = request.ToDate,
+                Page = request.Page,
+                PageSize = request.PageSize
+            };
+            var response = await _transactionService.GetAllTransactionByUserIdAsync(queryRequest);
             return Ok(response);
         }
 
-        [HttpGet("{id}")]
-        public async Task<IActionResult> GetTransactionByTransactionId([FromQuery]long transactionId)
+        [HttpGet("{reference}")]
+        [ValidateTransactionOwnership]
+        public async Task<IActionResult> GetTransactionByTransactionId(long reference)
         {
-            var response = await _transactionService.GetTransactionByIdAsync(transactionId);
+            var response = await _transactionService.GetTransactionByIdAsync(reference);
 
             if (!response.Status)
                 return NotFound(response);
@@ -51,8 +62,9 @@ namespace Expence.Controllers
             return Ok(response);
         }
 
-        [HttpPut("{id}")]
-        public async Task<IActionResult> UpdateTransaction([FromBody] UpdateTransactionRequest request)
+        [HttpPut("{reference}")]
+        [ValidateTransactionOwnership]
+        public async Task<IActionResult> UpdateTransaction(long reference, [FromBody] UpdateTransactionRequest request)
         {
             var response = await _transactionService.UpdateTransaction(request );
 
@@ -62,10 +74,11 @@ namespace Expence.Controllers
             return Ok(response);
         }
 
-        [HttpDelete("{id}")]
-        public async Task<IActionResult> Delete(string id)
+        [HttpDelete("{reference}")]
+        [ValidateTransactionOwnership]
+        public async Task<IActionResult> Delete(string reference)
         {
-            var response = await _transactionService.DeleteTransactionAsync(id);
+            var response = await _transactionService.DeleteTransactionAsync(reference, Convert.ToInt64(_userContext.GetUserId()));
 
             if (!response.Status)
                 return NotFound(response);
