@@ -6,7 +6,7 @@ namespace Expence.Application.Interface
     public interface IJwtService
     {
         string GenerateToken(User user);
-        string GenerateRefreshToken(User user);
+        RefreshToken GenerateRefreshToken(User user);
         ClaimsPrincipal GetClaimsPrincipalFromExpiredToken(string token);
     }
 }

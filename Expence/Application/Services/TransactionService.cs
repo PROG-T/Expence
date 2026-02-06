@@ -12,17 +12,28 @@ namespace Expence.Application.Services
     {
         private readonly IUnitOfWork _unitOfWork;
         private readonly IUserContextService _userContext;
+        private readonly ILogger<TransactionService> _logger;
 
-        public TransactionService(IUnitOfWork unitOfWork, IUserContextService userContext)
+        public TransactionService(IUnitOfWork unitOfWork, IUserContextService userContext, ILogger<TransactionService> logger)
         {
 
-          _unitOfWork = unitOfWork;
-          _userContext = userContext;
+            _unitOfWork = unitOfWork;
+            _userContext = userContext;
+            _logger = logger;
         }
         public async Task<BaseResponse<Transaction>> CreateTransactionAsync(CreateTransactionRequest request)
         {
-            var user = await _unitOfWork.Users.GetUserByEmailAsync(_userContext.GetUserEmail());
-            if (user == null) return new BaseResponse<Transaction>(false, "User not found");
+            var userEmail = _userContext.GetUserEmail().Data;
+            var userId = _userContext.GetUserId().Data;
+
+            _logger.LogInformation("Creating transaction for user: {UserId} ({Email})", userId, userEmail);
+
+            var user = await _unitOfWork.Users.GetUserByEmailAsync(userEmail);
+            if (user == null)
+            {
+                _logger.LogWarning("User not found for email: {Email}", userEmail);
+                return new BaseResponse<Transaction>(false, "User not found");
+            }
 
             var transaction = new Transaction
             {
@@ -31,23 +42,29 @@ namespace Expence.Application.Services
                 Category = request.Category,
                 CreatedAt = DateTimeConstants.CurrentWestAfricanTime,
                 Type = request.Type,
-                UserId =  Convert.ToInt64(_userContext.GetUserId()),
+                UserId =  Convert.ToInt64(_userContext.GetUserId().Data),
                 TransactionReference = $"TRX-{DateTime.UtcNow:yyyyMMddHHmmss}-{RandomNumberGenerator.GetInt32(100000, 999999)}"
             
             };
 
             await _unitOfWork.Transactions.AddTransactionAsync(transaction);
             await _unitOfWork.SaveAsync();
-
+            _logger.LogInformation(  "Transaction created successfully. Reference: {Reference}, Type: {Type}, Amount: {Amount}, Category: {Category}, UserId: {UserId}",
+                   transaction.TransactionReference, request.Type, request.Amount, request.Category, userId);
             return new BaseResponse<Transaction>(true, "transaction successfully recorded");
         }
 
-        public async Task<BaseResponse<Transaction>> DeleteTransactionAsync(string transactionReference, long userId)
+        public async Task<BaseResponse<Transaction>> DeleteTransactionAsync(string transactionReference)
         {
-            var savedTransaction = await _unitOfWork.Transactions.GetByTransactionReferenceAsync(transactionReference);
-            if (savedTransaction == null || savedTransaction.UserId != userId) 
-                return new BaseResponse<Transaction>(false, "transaction not found");
+            _logger.LogInformation("Attempting to delete transaction. Reference: {Reference}", transactionReference);
 
+            var savedTransaction = await _unitOfWork.Transactions.GetByTransactionReferenceAsync(transactionReference);
+            if (savedTransaction == null)
+            {
+                _logger.LogWarning("Transaction not found. Reference: {Reference}", transactionReference);
+
+                return new BaseResponse<Transaction>(false, "transaction not found");
+            }
              _unitOfWork.Transactions.DeleteTransactionAsync(savedTransaction);
             await _unitOfWork.SaveAsync();
 
@@ -55,32 +72,76 @@ namespace Expence.Application.Services
 
         }
 
-        public async Task<BaseResponse<Transaction>> GetTransactionByIdAsync(long id)
+        public async Task<BaseResponse<PagedResult<Transaction>>> GetAllTransactionByUserIdAsync(TransactionQueryRequest request)
         {
-            var transaction = await _unitOfWork.Transactions.GetByTransactionIdAsync(id);
-            return new BaseResponse<Transaction>(true, "", transaction);
-        }
+            _logger.LogInformation(
+                    "Retrieving transactions for user. UserId: {UserId}, Page: {Page}, PageSize: {PageSize}, Category: {Category}, Type: {Type}",
+                    request.UserId, request.Page, request.PageSize, request.Category, request.Type);
+           
+            if (request.Page < 1)
+                request.Page = 1;
+            if (request.PageSize < 1)
+                request.PageSize = 10;
+            if (request.PageSize > 100)
+                request.PageSize = 100;
 
-        public async Task<BaseResponse<List<Transaction>>> GetAllTransactionByUserIdAsync(TransactionQueryRequest request)
-        {
             var transactions = await _unitOfWork.Transactions.GetAllTransactionForUserByUserIdAsync(request);
-            return new BaseResponse<List<Transaction>>(true, "", transactions);
+            _logger.LogInformation(
+                    "Transactions retrieved successfully for user. UserId: {UserId}, Total Records: {TotalRecords}, Returned: {ReturnedCount}",
+                    request.UserId, transactions.Items, transactions.TotalCount);
+
+            return new BaseResponse<PagedResult<Transaction>>(true, "", transactions);
         }
 
         public async Task<BaseResponse<Transaction>> UpdateTransaction(UpdateTransactionRequest transactionRequest)
         {
+            var userId = _userContext.GetUserId().Data;
+
+            _logger.LogInformation(
+                "Updating transaction. Reference: {Reference}, UserId: {UserId}",
+                transactionRequest.transactionReference, userId);
+
             var foundTransaction = await _unitOfWork.Transactions.GetByTransactionReferenceAsync(transactionRequest.transactionReference);
-            if (foundTransaction == null) return new BaseResponse<Transaction>(false,"No transaction found");
+            if (foundTransaction == null)
+            {
+                _logger.LogWarning("Transaction not found for update. Reference: {Reference}", transactionRequest.transactionReference);
+                return new BaseResponse<Transaction>(false, "No transaction found"); 
+            }
+
+            _logger.LogDebug(
+                    "Transaction previous values. Reference: {Reference}, Amount: {PrevAmount}, Category: {PrevCategory}, Type: {PrevType}",
+                    foundTransaction.TransactionReference, foundTransaction.Amount, foundTransaction.Category, foundTransaction.Type);
 
             foundTransaction.Amount = transactionRequest.Amount;
             foundTransaction.Category = transactionRequest.Category;
             foundTransaction.Description = transactionRequest.Description;
             foundTransaction.Type = transactionRequest.Type;
+            foundTransaction.ModifiedAt = DateTimeConstants.CurrentWestAfricanTime;
 
             await _unitOfWork.Transactions.UpdateTransactionAsync(foundTransaction);
             await _unitOfWork.SaveAsync();
 
+            _logger.LogInformation(
+                    "Transaction updated successfully. Reference: {Reference}, New Amount: {Amount}, New Category: {Category}, New Type: {Type}, UserId: {UserId}",
+                    foundTransaction.TransactionReference, foundTransaction.Amount, foundTransaction.Category, foundTransaction.Type, userId);
+
             return new BaseResponse<Transaction>(true, " transaction updated");
+        }
+
+        public async Task<BaseResponse<Transaction>> GetTransactionByTransactionReference(string reference)
+        {
+            _logger.LogInformation("Retrieving transaction by reference: {Reference}", reference);
+
+            var transaction = await _unitOfWork.Transactions.GetByTransactionReferenceAsync(reference);
+            if (transaction == null)
+            {
+                _logger.LogWarning("Transaction not found. Reference: {Reference}", reference);
+                return new BaseResponse<Transaction>(false, "Transaction not found");
+            }
+
+            _logger.LogInformation("Transaction retrieved successfully. Reference: {Reference}, UserId: {UserId}", reference, transaction.UserId);
+
+            return new BaseResponse<Transaction>(true, "", transaction);
         }
     }
 }

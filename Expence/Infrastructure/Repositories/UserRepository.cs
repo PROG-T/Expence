@@ -29,6 +29,9 @@ namespace Expence.Infrastructure.Repositories
                 .FirstOrDefaultAsync();
             return response?? new User { };
         }
-
+        public void UpdateUserAsync(User user)
+        {
+            _context.Users.Update(user);
+        }
     }
 }

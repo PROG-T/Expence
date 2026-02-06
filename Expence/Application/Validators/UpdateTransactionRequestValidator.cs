@@ -17,8 +17,8 @@ namespace Expence.Application.Validators
                 .NotEmpty()
                     .WithMessage("Amount is required")
                 .GreaterThan(0)
-                    .WithMessage("Amount must be greater than zero");
-                
+                    .WithMessage("Amount must be greater than zero")
+                    .LessThanOrEqualTo(999999999.99m).WithMessage("Amount exceeds maximum allowed value");
 
             RuleFor(x => x.Category)
                 .NotEmpty()

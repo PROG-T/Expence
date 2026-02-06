@@ -1,7 +1,10 @@
+using Asp.Versioning;
+using Asp.Versioning.ApiExplorer;
 using Expence.API.Filters;
 using Expence.API.Middlewares;
 using Expence.Application.Interface;
 using Expence.Application.Services;
+using Expence.Domain.OptionsConfiguration;
 using Expence.Infrastructure;
 using Expence.Infrastructure.Interface;
 using Expence.Infrastructure.Repositories;
@@ -15,9 +18,9 @@ using Serilog.Enrichers.Sensitive;
 using Serilog.Events;
 using Serilog.Sinks.Grafana.Loki;
 using Swashbuckle.AspNetCore.SwaggerUI;
-using System;
 using System.Reflection;
 using System.Text;
+
 
 //configure logger
 Log.Logger = new LoggerConfiguration()
@@ -55,22 +58,59 @@ builder.Host.UseSerilog();
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddHttpClient();
 
+// ============ API VERSIONING CONFIGURATION ============
+builder.Services.AddApiVersioning(options =>
+{
+    // Read version from URL: /api/v1/endpoint
+    options.ApiVersionReader = new UrlSegmentApiVersionReader();
+
+    // If no version specified, use default version
+    options.AssumeDefaultVersionWhenUnspecified = true;
+
+    // Default version
+    options.DefaultApiVersion = new ApiVersion(1, 0);
+
+    // Report API versions in response headers
+    options.ReportApiVersions = true;
+})
+.AddApiExplorer();
+
+//configure rate-limiting
+var rateLimitingOptions = new RateLimitingOptions();
+builder.Configuration.GetSection(RateLimitingOptions.SectionName).Bind(rateLimitingOptions);
+builder.Services.Configure<RateLimitingOptions>(builder.Configuration.GetSection(RateLimitingOptions.SectionName));
+
+var redisConnectionString = builder.Configuration.GetConnectionString("Redis") ?? "localhost:6379";
+
+builder.Services.AddStackExchangeRedisCache(options =>
+{
+    options.Configuration = redisConnectionString;
+});
+
+builder.Services.AddSingleton<ISlidingWindowRateLimiter, SlidingWindowRateLimiter>();
+
 // Add services to the container.
 builder.Services.AddDbContext<ExpenceDbContext>(options => 
     options.UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection")));
+
 builder.Services.AddScoped<ITransactionRepository, TransactionRepository>();
 builder.Services.AddScoped<IUserRepository, UserRepository>();
 builder.Services.AddScoped<IEmailDomainInfoRepository, EmailDomainInfoRepository>();
+builder.Services.AddScoped<IRefreshTokenRepository, RefreshTokenRepository>();
+builder.Services.AddScoped<IPasswordResetTokenRepository, PasswordResetTokenRepository>();
+builder.Services.AddScoped<IEmailVerificationTokenRepository, EmailVerificationTokenRepository>();
+builder.Services.AddScoped<IUnitOfWork, UnitOfWork>();
 
 
 builder.Services.AddScoped<IAuthService, AuthService>();
 builder.Services.AddScoped<IJwtService, JwtService>();
 builder.Services.AddScoped<ITransactionService, TransactionService>();
 builder.Services.AddScoped<IUserContextService, UserContextService>();
-builder.Services.AddScoped<EmailService>();
+builder.Services.AddScoped<DisposableEmailService>();
 builder.Services.AddScoped<ICategoryPredictionService, CategoryPredictionService>();
-builder.Services.AddScoped<IUnitOfWork, UnitOfWork>();
-
+builder.Services.AddScoped<IExpenseSummaryGeneratorService, ExpenseSummaryGeneratorService>();
+builder.Services.Configure<EmailSettingsOptions>(builder.Configuration.GetSection("EmailSettings"));
+builder.Services.AddScoped<ISmtpEmailService, GoogleSmtpEmailService>();
 
 builder.Services.AddFluentValidationAutoValidation();
 builder.Services.AddFluentValidationClientsideAdapters();
@@ -79,9 +119,6 @@ builder.Services.AddControllers(options =>
 {
     options.Filters.Add<ValidationResultFilter>();
 });
-
-
-
 
 
 var jwtKey = builder.Configuration["Jwt:Key"];
@@ -114,26 +151,47 @@ builder.Services.AddAuthentication(options =>
 
 builder.Services.AddAuthorization();
 
-
 builder.Services.AddEndpointsApiExplorer();
-builder.Services.AddSwaggerGen(c =>
+
+builder.Services.AddSwaggerGen(options =>
 {
-    c.AddServer(new OpenApiServer
+    var provider = builder.Services.BuildServiceProvider().GetRequiredService<IApiVersionDescriptionProvider>();
+
+    // Create a swagger doc for each API version
+    foreach (var description in provider.ApiVersionDescriptions)
+    {
+        options.SwaggerDoc(description.GroupName, new OpenApiInfo
+        {
+            Title = "Expence API",
+            Version = description.ApiVersion.ToString(),
+            Description = description.IsDeprecated
+                ? "?? DEPRECATED - This API version is no longer supported"
+                : "Finance expense tracking API",
+            Contact = new OpenApiContact
+            {
+                Name = "Expence Support",
+                Email = "support@expence.app"
+            },
+            License = new OpenApiLicense
+            {
+                Name = "MIT"
+            }
+        });
+    }
+
+    options.AddServer(new OpenApiServer
     {
         Url = builder.Configuration["Swagger:Server"],
         Description = builder.Environment.EnvironmentName,
     });
 
-    c.AddServer(new OpenApiServer
+    options.AddServer(new OpenApiServer
     {
         Url = "https://localhost:7291",
         Description = "Local host",
     });
 
-    c.SwaggerDoc("API", new OpenApiInfo { Title = $"{builder.Environment.ApplicationName}", Version = builder.Configuration["Swagger:Version"] });
-   // c.SwaggerDoc("Admin", new OpenApiInfo { Title = $"{builder.Environment.ApplicationName}", Version = builder.Configuration["Swagger:Version"] });
-    var location = Assembly.GetAssembly(typeof(Program))!.Location;
-    c.AddSecurityDefinition("Bearer", new OpenApiSecurityScheme
+    options.AddSecurityDefinition("Bearer", new OpenApiSecurityScheme
     {
         Scheme = "Bearer",
         BearerFormat = "JWT",
@@ -142,8 +200,8 @@ builder.Services.AddSwaggerGen(c =>
         Description = "Bearer Authentication with JWT Token",
         Type = SecuritySchemeType.Http
     });
-    c.CustomSchemaIds(x => x.FullName);
-    c.AddSecurityRequirement(new OpenApiSecurityRequirement {
+    options.CustomSchemaIds(x => x.FullName);
+    options.AddSecurityRequirement(new OpenApiSecurityRequirement {
                 {
                     new OpenApiSecurityScheme
                     {
@@ -157,6 +215,8 @@ builder.Services.AddSwaggerGen(c =>
                 }
             });
 });
+
+
 builder.Services.AddSwaggerGenNewtonsoftSupport();
 
 builder.Services.AddCors( options =>
@@ -170,12 +230,14 @@ builder.Services.AddCors( options =>
     }); 
 });
 
+// ============ MIDDLEWARE PIPELINE ============
 
+var app = builder.Build(); 
 
+app.UseMiddleware<SlidingWindowRateLimitingMiddleware>();
 
-var app = builder.Build();
+app.UseMiddleware<RequestResponseLoggingMiddleware>();
 app.UseMiddleware<GlobalExceptionHandlerMiddleware>();
-//app.UseMiddleware<FluentValidationExceptionHandlerMiddleware>();
 
 app.UseSerilogRequestLogging();
 
@@ -183,14 +245,20 @@ app.UseSerilogRequestLogging();
 if (app.Environment.IsDevelopment())
 {
     app.UseSwagger();
-    app.UseSwaggerUI(c =>
+    app.UseSwaggerUI(options =>
         {
-            string swaggerJsonBasePath = string.IsNullOrWhiteSpace(c.RoutePrefix) ? "." : "..";
+            var provider = app.Services.GetRequiredService<IApiVersionDescriptionProvider>();
 
-            c.DocExpansion(DocExpansion.None);
-            c.DocumentTitle = "Expence API Swagger UI";
-            c.SwaggerEndpoint($"{swaggerJsonBasePath}/swagger/API/swagger.json", "API endpoints");
-            c.SwaggerEndpoint($"{swaggerJsonBasePath}/swagger/Admin/swagger.json", "Admin endpoints");
+            foreach (var description in provider.ApiVersionDescriptions)
+            {
+                options.SwaggerEndpoint(
+                    $"/swagger/{description.GroupName}/swagger.json",
+                    $"Expence API {description.GroupName.ToUpperInvariant()}");
+            }
+
+            options.DocExpansion(DocExpansion.None);
+            options.DocumentTitle = "Expence API Documentation";
+            options.DefaultModelsExpandDepth(2);
         }
         );
 }

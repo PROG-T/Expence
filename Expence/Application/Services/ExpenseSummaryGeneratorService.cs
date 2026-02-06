@@ -25,11 +25,23 @@ namespace Expence.Application.Services
         
         public async Task<string> GenerateMonthlyReportAsync(long userId)
         {
-           
+            _logger.LogInformation("Generating monthly report for UserId: {UserId}", userId);
+
             var transactions = await _unitOfWork.Transactions.GetAllMonthlyTransactionByUserIdAsync(userId);
 
             if (!transactions.Any())
+            {
+                _logger.LogInformation("No transactions found for monthly report. UserId: {UserId}", userId);
                 return "No transactions this month yet";
+
+            }
+            var totalAmount = transactions.Sum(t => t.Amount);
+            var averageAmount = transactions.Average(t => (double)t.Amount);
+
+            _logger.LogInformation(
+                "Monthly report data collected. UserId: {UserId}, TransactionCount: {Count}, Total: {Total}, Average: {Average}",
+                userId, transactions.Count, totalAmount, averageAmount);
+
 
             var categoryBreakdown = transactions
                 .GroupBy(t => t.Category)
@@ -54,17 +66,25 @@ namespace Expence.Application.Services
             Keep it concise (2-3 sentences per section).
             """;
 
-            return await CallOpenAiAsync(prompt);
+            _logger.LogDebug("Generated prompt for AI report. UserId: {UserId}", userId);
+
+            var report = await CallOpenAiAsync(prompt);
+
+            _logger.LogInformation("Monthly report generated successfully. UserId: {UserId}", userId);
+
+            return report;
         }
 
         private async Task<string> CallOpenAiAsync(string prompt)
         {
             try
             {
+                _logger.LogDebug("Calling OpenAI API for report generation");
+
                 var request = new
                 {
-                    model = _config["AiSettings:OpenAiModel"] ?? "gpt-3.5-turbo",
-                    messages = new[]
+                    model = _config["AiSettings:Model"] ?? "gpt-3.5-turbo",
+                    messages = new object[]
                     {
                         new { role = "system", content = "You are a friendly financial advisor." },
                         new { role = "user", content = prompt }
@@ -82,18 +102,23 @@ namespace Expence.Application.Services
 
                 if (!response.IsSuccessStatusCode)
                 {
-                    _logger.LogWarning("OpenAI API failed: {Status}", response.StatusCode);
+                    _logger.LogWarning("OpenAI API failed: {Status}: {content}", response.StatusCode, await response.Content.ReadAsStringAsync());
                     return "Unable to generate report at this time.";
                 }
 
                 var json = await response.Content.ReadAsStringAsync();
                 using var doc = JsonDocument.Parse(json);
-                return doc
-                    .RootElement
-                    .GetProperty("choices")[0]
-                    .GetProperty("message")
-                    .GetProperty("content")
-                    .GetString() ?? "Report generation failed.";
+
+                var reportContent = doc
+                     .RootElement
+                     .GetProperty("choices")[0]
+                     .GetProperty("message")
+                     .GetProperty("content")
+                     .GetString() ?? "Report generation failed.";
+
+                _logger.LogInformation("OpenAI report generated successfully");
+
+                return reportContent;
             }
             catch (Exception ex)
             {
@@ -103,9 +128,3 @@ namespace Expence.Application.Services
         }
     }
 }
-
-
-
-//use httpclient factory 
-// send mail notification 
-//frontend

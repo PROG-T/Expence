@@ -11,8 +11,9 @@ namespace Expence.Application.Validators
                 .NotEmpty()
                     .WithMessage("Amount is required")
                 .GreaterThan(0)
-                    .WithMessage("Amount must be greater than zero");
-               
+                    .WithMessage("Amount must be greater than zero")
+             .LessThanOrEqualTo(999999999.99m).WithMessage("Amount exceeds maximum allowed value");
+
 
             RuleFor(x => x.Category)
                 .NotEmpty()
@@ -23,6 +24,7 @@ namespace Expence.Application.Validators
                     .WithMessage("Category contains invalid characters");
 
             RuleFor(x => x.Description)
+                .NotEmpty().WithMessage("Description is required")
                 .MaximumLength(500)
                     .WithMessage("Description cannot exceed 500 characters");
 
@@ -31,6 +33,10 @@ namespace Expence.Application.Validators
                     .WithMessage("Transaction type is required")
                 .IsInEnum()
                     .WithMessage("Invalid transaction type");
+
+            RuleFor(x => x.Category)
+               .NotEmpty().WithMessage("Category is required")
+               .MaximumLength(100).WithMessage("Category cannot exceed 100 characters");
         }
     }
 }

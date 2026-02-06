@@ -11,6 +11,9 @@ namespace Expence.Infrastructure
         public DbSet<User> Users { get; set; }
         public DbSet<Transaction> Transactions { get; set; }
         public DbSet<EmailDomainInfo> EmailDomainInfo { get; set; }
+        public DbSet<RefreshToken> RefreshTokens { get; set; }
+        public DbSet<PasswordResetToken> PasswordResetTokens { get; set; }
+        public DbSet<EmailVerificationToken> EmailVerificationTokens { get; set; }
 
 
 
@@ -43,6 +46,30 @@ namespace Expence.Infrastructure
             {
                 b.HasKey(e => e.Id);
                 b.HasIndex(e => e.Domain);
+            });
+
+            modelBuilder.Entity<RefreshToken>(b =>
+            {
+                b.HasKey(t => t.Id);
+                b.HasIndex(t => t.Token).IsUnique();
+                b.Property(t => t.Token).IsRequired();
+                b.Property(t => t.ExpiryDate).IsRequired();
+                b.HasOne(t => t.User).WithMany(u => u.RefreshTokens).HasForeignKey(t => t.UserId).OnDelete(DeleteBehavior.Cascade);
+            });
+            modelBuilder.Entity<PasswordResetToken>(b =>
+            {
+                b.HasKey(t => t.Id);
+                b.HasIndex(t => t.Token).IsUnique();
+                b.Property(t => t.Token).IsRequired();
+                b.Property(t => t.ExpiryDate).IsRequired();
+            });
+
+            modelBuilder.Entity<EmailVerificationToken>(b =>
+            {
+                b.HasKey(t => t.Id);
+                b.HasIndex(t => t.Token).IsUnique();
+                b.Property(t => t.Token).IsRequired();
+                b.Property(t => t.ExpiryDate).IsRequired();
             });
         }
     }

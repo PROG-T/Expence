@@ -35,10 +35,11 @@ namespace Expence.Infrastructure.Repositories
                     t.UserId == userId &&
                     t.CreatedAt >= startOfMonth &&
                     t.CreatedAt < startOfNextMonth)
+                .OrderByDescending(t => t.CreatedAt)
                 .ToListAsync();
         }
 
-        public async Task<List<Transaction>> GetAllTransactionForUserByUserIdAsync(TransactionQueryRequest request)
+        public async Task<PagedResult<Transaction>> GetAllTransactionForUserByUserIdAsync(TransactionQueryRequest request)
         {
             var transactions = _context.Transactions.AsNoTracking().Where(t => t.UserId == request.UserId);
 
@@ -58,7 +59,13 @@ namespace Expence.Infrastructure.Repositories
 
             var items = await transactions.OrderByDescending(t => t.CreatedAt).Skip((request.Page-1) * request.PageSize).Take(request.PageSize).ToListAsync();
 
-            return items;
+            return new PagedResult<Transaction>
+            {
+                Items = items,
+                TotalCount = ItemCount,
+                Page = request.Page,
+                PageSize = request.PageSize
+            };
         }
 
         public async Task<Transaction> GetByTransactionIdAsync(long id)

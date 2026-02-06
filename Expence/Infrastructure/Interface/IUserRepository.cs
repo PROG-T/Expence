@@ -7,5 +7,7 @@ namespace Expence.Infrastructure.Interface
     {
         Task<User> GetUserByEmailAsync(string email);
         Task<UserDto> AddUserAsync(User user);
+        void UpdateUserAsync(User user);
+
     }
 }

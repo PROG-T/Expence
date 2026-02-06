@@ -7,7 +7,7 @@ namespace Expence.Infrastructure.Interface
     {
         Task<Transaction> GetByTransactionIdAsync(long id);
         Task<Transaction> GetByTransactionReferenceAsync(string transactionReference);
-        Task<List<Transaction>> GetAllTransactionForUserByUserIdAsync(TransactionQueryRequest request);
+        Task<PagedResult<Transaction>> GetAllTransactionForUserByUserIdAsync(TransactionQueryRequest request);
         Task<List<Transaction>> GetAllMonthlyTransactionByUserIdAsync(long userId);
         Task AddTransactionAsync(Transaction transaction);
         void DeleteTransactionAsync(Transaction transaction);

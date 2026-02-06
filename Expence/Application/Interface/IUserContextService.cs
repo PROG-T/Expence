@@ -1,8 +1,10 @@
-﻿namespace Expence.Application.Interface
+﻿using Expence.Domain.DTOs;
+
+namespace Expence.Application.Interface
 {
     public interface IUserContextService
     {
-        string GetUserId();
-        string GetUserEmail();
+        BaseResponse<string> GetUserId();
+        BaseResponse<string> GetUserEmail();
     }
 }
